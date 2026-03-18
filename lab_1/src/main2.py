@@ -9,13 +9,12 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QPushButton, QTextEdit, QMessageBox)
 from PyQt5.QtCore import Qt
 
+ARRIVAL = "arrival"
+ARRIVAL_1 = "arrival1"
+ARRIVAL_2 = "arrival2"
+DEPARTURE = "departure"
 
 def rayleigh_time(lmbd):
-    """
-    Генерация времени по распределению Рэлея так, чтобы среднее было равно 1 / λ
-    E[X] = scale * sqrt(pi/2)
-    => scale = (1/λ) / sqrt(pi/2)
-    """
     if lmbd <= 0:
         lmbd = 0.0001
 
@@ -24,9 +23,6 @@ def rayleigh_time(lmbd):
 
 
 def uniform_time(mean, rang):
-    """
-    Равномерное распределение на [mean - rang, mean + rang]
-    """
     a = mean - rang
     b = mean + rang
 
@@ -56,37 +52,23 @@ def simulate_smo(lambda1, lambda2, mu, rang, max_requests=1000):
     wait_times = []
     system_times = []
 
-    # первые поступления (Рэлея)
-    heapq.heappush(event_queue, (rayleigh_time(lambda1), "arrival1"))
-    heapq.heappush(event_queue, (rayleigh_time(lambda2), "arrival2"))
+    # первые поступления
+    heapq.heappush(event_queue, (rayleigh_time(lambda1), ARRIVAL_1))
+    heapq.heappush(event_queue, (rayleigh_time(lambda2), ARRIVAL_2))
 
     while processed < max_requests:
-
         current_time, event = heapq.heappop(event_queue)
-
-        # учет занятости
         if server_busy:
             busy_time += current_time - last_event_time
-
         last_event_time = current_time
 
-        # -----------------
-        # Поступление заявки
-        # -----------------
-        if "arrival" in event:
-
+        if ARRIVAL in event:
             queue.append(current_time)
 
-            if event == "arrival1":
-                heapq.heappush(
-                    event_queue,
-                    (current_time + rayleigh_time(lambda1), "arrival1")
-                )
+            if event == ARRIVAL_1:
+                heapq.heappush(event_queue, (current_time + rayleigh_time(lambda1), ARRIVAL_1))
             else:
-                heapq.heappush(
-                    event_queue,
-                    (current_time + rayleigh_time(lambda2), "arrival2")
-                )
+                heapq.heappush(event_queue, (current_time + rayleigh_time(lambda2), ARRIVAL_2))
 
             if not server_busy:
                 arrival_time = queue.pop(0)
@@ -97,16 +79,13 @@ def simulate_smo(lambda1, lambda2, mu, rang, max_requests=1000):
 
                 heapq.heappush(
                     event_queue,
-                    (current_time + service_time, "departure")
+                    (current_time + service_time, DEPARTURE)
                 )
 
                 system_times.append(service_time)
                 server_busy = True
 
-        # -----------------
-        # Окончание обслуживания
-        # -----------------
-        elif event == "departure":
+        elif event == DEPARTURE:
 
             processed += 1
 
