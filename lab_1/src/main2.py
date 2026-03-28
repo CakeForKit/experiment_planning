@@ -1,118 +1,9 @@
 import sys
-import numpy.random as nr
-import heapq
 import matplotlib.pyplot as plt
-import math
-
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QGridLayout, QLabel, QLineEdit, 
                              QPushButton, QTextEdit, QMessageBox)
-from PyQt5.QtCore import Qt
-
-ARRIVAL = "arrival"
-ARRIVAL_1 = "arrival1"
-ARRIVAL_2 = "arrival2"
-DEPARTURE = "departure"
-
-def rayleigh_time(lmbd):
-    if lmbd <= 0:
-        lmbd = 0.0001
-
-    scale = (1 / lmbd) / math.sqrt(math.pi / 2)
-    return nr.rayleigh(scale)
-
-
-def uniform_time(mean, rang):
-    a = mean - rang
-    b = mean + rang
-
-    if b <= a:
-        b = a + 0.0001
-
-    return nr.uniform(a, b)
-
-
-def simulate_smo(lambda1, lambda2, mu, rang, max_requests=1000):
-
-    service_mean = 1 / mu
-    total_lambda = lambda1 + lambda2
-    R_calc = total_lambda / mu
-
-    event_queue = []
-    heapq.heapify(event_queue)
-
-    current_time = 0
-    last_event_time = 0
-    busy_time = 0
-    processed = 0
-
-    queue = []
-    server_busy = False
-
-    wait_times = []
-    system_times = []
-
-    # первые поступления
-    heapq.heappush(event_queue, (rayleigh_time(lambda1), ARRIVAL_1))
-    heapq.heappush(event_queue, (rayleigh_time(lambda2), ARRIVAL_2))
-
-    while processed < max_requests:
-        current_time, event = heapq.heappop(event_queue)
-        if server_busy:
-            busy_time += current_time - last_event_time
-        last_event_time = current_time
-
-        if ARRIVAL in event:
-            queue.append(current_time)
-
-            if event == ARRIVAL_1:
-                heapq.heappush(event_queue, (current_time + rayleigh_time(lambda1), ARRIVAL_1))
-            else:
-                heapq.heappush(event_queue, (current_time + rayleigh_time(lambda2), ARRIVAL_2))
-
-            if not server_busy:
-                arrival_time = queue.pop(0)
-
-                wait_times.append(0)
-
-                service_time = uniform_time(service_mean, rang)
-
-                heapq.heappush(
-                    event_queue,
-                    (current_time + service_time, DEPARTURE)
-                )
-
-                system_times.append(service_time)
-                server_busy = True
-
-        elif event == DEPARTURE:
-
-            processed += 1
-
-            if queue:
-                arrival_time = queue.pop(0)
-
-                wait = current_time - arrival_time
-                wait_times.append(wait)
-
-                service_time = uniform_time(service_mean, rang)
-
-                heapq.heappush(
-                    event_queue,
-                    (current_time + service_time, "departure")
-                )
-
-                system_times.append(wait + service_time)
-                server_busy = True
-            else:
-                server_busy = False
-
-    avg_wait = sum(wait_times) / len(wait_times)
-    avg_system = sum(system_times) / len(system_times)
-
-    R_fact = busy_time / current_time
-
-    return R_calc, R_fact, avg_wait, avg_system, current_time
+from smo import simulate_smo
 
 
 class SMOGui(QMainWindow):
@@ -200,10 +91,8 @@ class SMOGui(QMainWindow):
             R_calc, R_fact, avg_wait, avg_system, T = simulate_smo(
                 lambda1, lambda2, mu, rang, n
             )
-
             if R_calc >= 1:
-                QMessageBox.warning(self, "Внимание",
-                                    "Система неустойчива (R ≥ 1)")
+                QMessageBox.warning(self, "Внимание", "Система неустойчива (R ≥ 1)")
 
             self.result_text.clear()
             self.result_text.append(
@@ -253,6 +142,114 @@ class SMOGui(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", str(e))
 
+    def wait_lambda_1(self, lambda2, mu, rang, runs, request):
+        l1_vals = []
+        W1 = []
+
+        x = 0.1
+        while x < mu - lambda2:
+            results = []
+            for _ in range(runs):
+                _, _, avg_wait, _, _ = simulate_smo(x, lambda2, mu, rang, request)
+                results.append(avg_wait)
+
+            l1_vals.append(x)
+            W1.append(sum(results) / len(results))
+
+            x += 0.1
+
+        plt.figure()
+        plt.plot(l1_vals, W1, 'r')
+        plt.xlabel("lambda 1")
+        plt.ylabel("Среднее время ожидания ")
+        plt.title("Среднее время ожидания от lambda 1")
+        plt.grid()
+        plt.show()
+
+    def wait_lambda_2(self, lambda1, mu, rang, runs, request):
+        l2_vals = []
+        W_lambda2 = []
+
+        x = 0.1
+        while x < mu - lambda1:
+            results = []
+            for _ in range(runs):
+                _, _, avg_wait, _, _ = simulate_smo(lambda1, x, mu, rang, request)
+                results.append(avg_wait)
+
+            l2_vals.append(x)
+            W_lambda2.append(sum(results) / len(results))
+
+            x += 0.1
+
+        plt.figure()
+        plt.plot(l2_vals, W_lambda2, 'r')
+        plt.xlabel("lambda 2")
+        plt.ylabel("Среднее время ожидания")
+        plt.title("Среднее время ожидания от lambda 2")
+        plt.grid()
+        plt.show()
+    
+    def wait_mu(self, lambda1, lambda2, rang, runs, request):
+        mu_vals = []
+        W_mu = []
+
+        x = lambda1 + lambda2 + 0.2
+        while x < 3:
+            results = []
+            for _ in range(runs):
+                _, _, avg_wait, _, _ = simulate_smo(lambda1, lambda2, x, rang, request)
+                results.append(avg_wait)
+
+            mu_vals.append(x)
+            W_mu.append(sum(results) / len(results))
+
+            x += 0.2
+
+        plt.figure()
+        plt.plot(mu_vals, W_mu, 'r')
+        plt.xlabel("mu")
+        plt.ylabel("Среднее время ожидания")
+        plt.title("Среднее время ожидания от mu")
+        plt.grid()
+        plt.show()
+
+    def wait_rang(self, lambda1, lambda2, mu, runs, request):
+        rang_vals = []
+        W_rang = []
+
+        x = 0.1
+        while x < 10:
+            results = []
+            for _ in range(runs+20):
+                _, _, avg_wait, _, _ = simulate_smo(lambda1, lambda2, mu, x, request)
+                results.append(avg_wait)
+
+            rang_vals.append(x)
+            W_rang.append(sum(results) / len(results))
+
+            x += 0.5
+
+        window_size = 5
+        except_end = 0
+        smoothed_W_rang = W_rang.copy()  # Start with original values
+        
+        # Smooth all values except the last 5
+        for i in range(len(W_rang) - except_end):
+            start = max(0, i - window_size // 2)
+            end = min(len(W_rang) - except_end, i + window_size // 2 + 1)
+            smoothed_value = sum(W_rang[start:end]) / (end - start)
+            smoothed_W_rang[i] = smoothed_value
+
+        plt.figure()
+        # plt.plot(rang_vals, W_rang, 'b-', alpha=0.5)
+        plt.plot(rang_vals, smoothed_W_rang, 'r')
+        plt.xlabel("rang")
+        plt.ylabel("Среднее время ожидания")
+        plt.title("Среднее время ожидания от rang")
+        plt.grid()
+        plt.show()
+
     def plot_factors(self):
         try:
             lambda1 = float(self.lambda1_entry.text())
@@ -262,77 +259,10 @@ class SMOGui(QMainWindow):
             request = int(self.num_entry.text())
             runs = 30
             
-            # Wq(λ1)
-            l1_vals = []
-            W1 = []
-
-            x = 0.1
-            while x < mu - lambda2:
-                results = []
-                for _ in range(runs):
-                    _, _, avg_wait, _, _ = simulate_smo(x, lambda2, mu, rang, request)
-                    results.append(avg_wait)
-
-                l1_vals.append(x)
-                W1.append(sum(results) / len(results))
-
-                x += 0.1
-
-            plt.figure()
-            plt.plot(l1_vals, W1, 'r')
-            plt.xlabel("lambda 1")
-            plt.ylabel("Среднее время ожидания ")
-            plt.title("Среднее время ожидания от lambda 1")
-            plt.grid()
-            plt.show()
-
-            # Wq(λ2)
-            l2_vals = []
-            W_lambda2 = []
-
-            x = 0.1
-            while x < mu - lambda1:
-                results = []
-                for _ in range(runs):
-                    _, _, avg_wait, _, _ = simulate_smo(lambda1, x, mu, rang, request)
-                    results.append(avg_wait)
-
-                l2_vals.append(x)
-                W_lambda2.append(sum(results) / len(results))
-
-                x += 0.1
-
-            plt.figure()
-            plt.plot(l2_vals, W_lambda2, 'r')
-            plt.xlabel("lambda 2")
-            plt.ylabel("Среднее время ожидания")
-            plt.title("Среднее время ожидания от lambda 2")
-            plt.grid()
-            plt.show()
-
-            # Wq(μ)
-            mu_vals = []
-            W_mu = []
-
-            x = lambda1 + lambda2 + 0.2
-            while x < 3:
-                results = []
-                for _ in range(runs):
-                    _, _, avg_wait, _, _ = simulate_smo(lambda1, lambda2, x, rang, request)
-                    results.append(avg_wait)
-
-                mu_vals.append(x)
-                W_mu.append(sum(results) / len(results))
-
-                x += 0.2
-
-            plt.figure()
-            plt.plot(mu_vals, W_mu, 'r')
-            plt.xlabel("mu")
-            plt.ylabel("Среднее время ожидания")
-            plt.title("Среднее время ожидания от mu")
-            plt.grid()
-            plt.show()
+            # self.wait_lambda_1(lambda2, mu, rang, runs, request)    # Wq(lambda 1)
+            # self.wait_lambda_2(lambda1, mu, rang, runs, request)    # Wq(lambda 2)
+            # self.wait_mu(lambda1, lambda2, rang, runs, request)     # Wq(mu)
+            self.wait_rang(lambda1, lambda2, mu, runs, request)     # Wq(range)
             
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", str(e))
