@@ -231,10 +231,10 @@ def calculate_experiment_results(mid_points, half_ranges, design_matrix):
         y1_responses.append(avg_wait1)
         y2_responses.append(avg_wait2)
 
-    # Вычисляем коэффициенты для ПОЛНОЙ модели 
+    # Вычисляем коэффициенты для полной модели 
     a1_full = calculate_regression_coefficients(design_matrix, y1_responses)
     a2_full = calculate_regression_coefficients(design_matrix, y2_responses)
-    # Вычисляем коэффициенты для ЛИНЕЙНОЙ модели 
+    # Вычисляем коэффициенты для не полной модели 
     a1_linear = calculate_linear_coefficients(design_matrix, y1_responses)
     a2_linear = calculate_linear_coefficients(design_matrix, y2_responses)
     
@@ -243,13 +243,10 @@ def calculate_experiment_results(mid_points, half_ranges, design_matrix):
         y1_actual = y1_responses[i] # Реальное значение из симуляции
         y2_actual = y2_responses[i]
         
-        # Предсказания
         y1_linear = predict_linear(a1_linear, row)     # Только линейные члены
         y1_full = predict_full(a1_full, row)         # Со всеми взаимодействиями
         y2_linear = predict_linear(a2_linear, row)
         y2_full = predict_full(a2_full, row)
-        
-        # Ошибки предсказания
         delta_y1_linear = abs(y1_actual - y1_linear)
         delta_y1_full = abs(y1_actual - y1_full)
         delta_y2_linear = abs(y2_actual - y2_linear)
@@ -286,7 +283,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Имитационная модель СМО (дисциплина обслуживания LIFO)")
         self.setGeometry(0, 0, 1200, 800)
         
-        # Предвычисляем матрицу планирования
         self.design_matrix = generate_full_factorial_matrix(NUM_FACTORS)
         
         self._setup_ui()
@@ -382,7 +378,6 @@ class MainWindow(QMainWindow):
             half_ranges.append((max_val - min_val) / 2)
         return half_ranges
     
-    """Заполняет таблицу результатами."""
     def _populate_results_table(self, table_data):
         self.results_table.setRowCount(len(table_data))
         
@@ -411,7 +406,6 @@ class MainWindow(QMainWindow):
                 self.results_table.setItem(row_idx, col, item)
                 col += 1
     
-    """Отображает уравнения регрессии."""
     def _display_equations(self, a1_linear, a1_full, a2_linear, a2_full, mid_points, half_ranges):
         partLine = 65
         equations_text = []
@@ -470,14 +464,11 @@ class MainWindow(QMainWindow):
     
     def _on_calculate(self):
         try:
-            # Считываем входные данные
             mid_points = self._read_input_values()
             half_ranges = self._calculate_half_ranges()
-            
-            # Выполняем расчет
+
             results = calculate_experiment_results(mid_points, half_ranges, self.design_matrix)
             
-            # Отображаем результаты
             self._populate_results_table(results['table_data'])
             self._display_equations(
                 results['coefficients_y1_linear'],

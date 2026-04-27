@@ -4,7 +4,7 @@ from itertools import combinations, product
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QGridLayout, QTabWidget, QLabel, 
                              QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-                             QTextEdit, QScrollArea, QGroupBox, QFrame, QHeaderView,
+                             QTextEdit, QScrollArea, QSplitter, QGroupBox, QFrame, QHeaderView,
                              QMessageBox)
 from PyQt5.QtCore import Qt
 from smo import simulate_smo
@@ -36,14 +36,14 @@ def build_regression_equation_norm(b, factor_symbols):
     
     for comb in combinations(range(n), 2):
         terms.append("".join([factor_symbols[i] for i in comb]))
-    eq = "y = " + " + ".join(f"{b[i]:.4f}*{terms[i]}" for i in range(len(terms)))
+    eq = "y = " + " + ".join(f"{b[i]:.4f}·{terms[i]}" for i in range(len(terms)))
     return eq
 
 def build_regression_equation_norm_dfe(b, factor_symbols):
     terms = ["1"] + factor_symbols
     
     eq = "y = " + " + ".join(
-        f"{b[i]:.4f}*{terms[i]}" for i in range(len(b))
+        f"{b[i]:.4f}·{terms[i]}" for i in range(len(b))
     )
     return eq
 
@@ -59,7 +59,7 @@ def build_regression_nat_dfe(b, factor_symbols, X_mid, X_delta):
     # линейные (ВСЕ 6 факторов)
     for i in range(n):
         coef = b[i+1] * X_delta[i]
-        eq_terms.append(f"{coef:.4f}*{factor_symbols[i]}")
+        eq_terms.append(f"{coef:.4f}·{factor_symbols[i]}")
     
     return " + ".join(eq_terms)
 
@@ -73,7 +73,7 @@ def build_full_nonlinear_equation(b, factor_symbols):
             terms.append("".join(factor_symbols[i] for i in comb))
     
     return " + ".join(
-        f"{b[i]:.4f}*{terms[i]}" for i in range(len(b))
+        f"{b[i]:.4f}·{terms[i]}" for i in range(len(b))
     )
 
 def build_full_nonlinear_nat(b, factor_symbols, X_mid, X_delta):
@@ -89,7 +89,7 @@ def build_full_nonlinear_nat(b, factor_symbols, X_mid, X_delta):
                 term = "1"
             else:
                 term = "*".join(factor_symbols[i] for i in comb)
-            terms.append(f"{coef:.4f}*{term}")
+            terms.append(f"{coef:.4f}·{term}")
             idx += 1
     
     return " + ".join(terms)
@@ -133,7 +133,7 @@ def build_defining_relation(relations):
             prod = normalize(prod)
             closure.add(to_str(prod))
     
-    return "I = " + " = ".join(sorted(closure))
+    return "1 = " + " = ".join(sorted(closure))
 
 def get_defining_group(relations):
     def normalize(prod):
@@ -250,15 +250,14 @@ class FractionalFactorialWidget(QWidget):
         self.ui_init()
         
     def ui_init(self):
-        layout = QVBoxLayout()
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
         
-        # Скролл-область
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll_widget = QWidget()
-        scroll_layout = QVBoxLayout(scroll_widget)
-        
+        input_layout = QHBoxLayout()
+
         # Количество прогонов
+        input_layout_1 = QVBoxLayout()
         runs_layout = QHBoxLayout()
         runs_layout.addWidget(QLabel("Количество генерирующих соотношений:"))
         self.runs_entry = QLineEdit()
@@ -268,23 +267,43 @@ class FractionalFactorialWidget(QWidget):
         btn_set = QPushButton("Задать")
         btn_set.clicked.connect(self.ui_update_relations)
         runs_layout.addWidget(btn_set)
-        scroll_layout.addLayout(runs_layout)
+        # scroll_layout.addLayout(runs_layout)
+        # input_layout_1.addLayout(runs_layout) 
         
         # Соотношения
         self.relations_frame = QWidget()
         self.relations_layout = QVBoxLayout(self.relations_frame)
-        scroll_layout.addWidget(self.relations_frame)
+        input_layout_1.addWidget(self.relations_frame)
         
+        input_layout.addLayout(input_layout_1)
         # Диапазоны
+        range_layout = QVBoxLayout()
         self.range_frame = QWidget()
         self.range_layout = QGridLayout(self.range_frame)
-        scroll_layout.addWidget(self.range_frame)
+        self.range_layout.setContentsMargins(0, 0, 0, 0)  # (left, top, right, bottom)
+        self.range_layout.setSpacing(5)  # расстояние между виджетами
+        range_layout.addWidget(self.range_frame)
+        range_layout.addStretch()
+        input_layout.addLayout(range_layout)
+
+
+        layout.addLayout(input_layout)
         
         btn_update = QPushButton("Обновить факторы")
         btn_update.clicked.connect(self.update_all)
-        scroll_layout.addWidget(btn_update)
+        layout.addWidget(btn_update)
+        # Кнопка расчета
+        btn_calc = QPushButton("Вычислить ДФЭ")
+        btn_calc.clicked.connect(self.calculate)
+        layout.addWidget(btn_calc)
         
-        # Таблица
+        # Разделитель для таблицы и уравнений
+        splitter = QSplitter(Qt.Vertical)
+
+        # Контейнер для таблицы
+        table_container = QWidget()
+        table_layout = QVBoxLayout(table_container)
+        table_layout.setContentsMargins(0, 0, 0, 0)
         columns = ["№"] + factor_symbols + ["y1","y1_lin","y1_nlin","Δy1_lin","Δy1_nlin",
                                            "y2","y2_lin","y2_nlin","Δy2_lin","Δy2_nlin"]
         
@@ -292,33 +311,36 @@ class FractionalFactorialWidget(QWidget):
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels(columns)
         self.table.horizontalHeader().setStretchLastSection(True)
-        scroll_layout.addWidget(self.table)
+        table_layout.addWidget(self.table)
+        splitter.addWidget(table_container)
         
-        # Уравнения
-        eq_group = QGroupBox("Регрессионные уравнения")
-        eq_layout = QVBoxLayout()
+        # Контейнер для уравнений
+        equations_container = QWidget()
+        equations_layout = QVBoxLayout(equations_container)
+        equations_layout.setContentsMargins(0, 0, 0, 0)
+        equations_label = QLabel("Регрессионные уравнения:")
+        equations_layout.addWidget(equations_label)
         self.text_eq = QTextEdit()
         self.text_eq.setReadOnly(True)
-        eq_layout.addWidget(self.text_eq)
-        eq_group.setLayout(eq_layout)
-        scroll_layout.addWidget(eq_group)
+        self.text_eq.setFontFamily("Consolas")
+        self.text_eq.setFontPointSize(10)
+        equations_layout.addWidget(self.text_eq)
+        splitter.addWidget(equations_container)
         
         # Результат ДФЭ
-        def_group = QGroupBox("Результат ДФЭ")
-        def_layout = QVBoxLayout()
-        self.text_def = QTextEdit()
-        self.text_def.setReadOnly(True)
-        def_layout.addWidget(self.text_def)
-        def_group.setLayout(def_layout)
-        scroll_layout.addWidget(def_group)
-        
-        # Кнопка расчета
-        btn_calc = QPushButton("Вычислить ДФЭ")
-        btn_calc.clicked.connect(self.calculate)
-        scroll_layout.addWidget(btn_calc)
-        
-        scroll.setWidget(scroll_widget)
-        layout.addWidget(scroll)
+        def_container = QWidget()
+        def_layout = QVBoxLayout(def_container)
+        def_layout.setContentsMargins(0, 0, 0, 0)
+        def_label = QLabel("Результат ДФЭ:")
+        def_layout.addWidget(def_label)
+        self.def_text = QTextEdit()
+        self.def_text.setReadOnly(True)
+        self.def_text.setFontFamily("Consolas")
+        self.def_text.setFontPointSize(10)
+        def_layout.addWidget(self.def_text)
+        splitter.addWidget(def_container)
+
+        layout.addWidget(splitter)
         self.setLayout(layout)
         
         self.ui_update_relations()
@@ -424,6 +446,7 @@ class FractionalFactorialWidget(QWidget):
         try:
             self.ui_parse_relations()
             defining_relation = build_defining_relation(self.relations)
+            print(f"defining_relation: {defining_relation}")
             m = len(self.dependent_factors)
             replication_order = 2 ** m
             num_replaced_factors = len(self.dependent_factors)
@@ -435,6 +458,7 @@ class FractionalFactorialWidget(QWidget):
                     generating_relations.append(t)
             
             generating_relations_text = ", ".join(generating_relations) if generating_relations else "—"
+            print(f"generating_relations_text: {generating_relations_text}")
             
             generators = []
             for left, right in self.relations.items():
@@ -446,15 +470,15 @@ class FractionalFactorialWidget(QWidget):
             alias_text = build_alias_lines(generators, base_factors, self.dependent_factors, self.relations)
             
             final_text = (
-                f"кратность реплики: {replication_order}\n"
-                f"количество заменённых факторов: {num_replaced_factors}\n"
-                f"генерирующие соотношения: {generating_relations_text}\n"
+                # f"кратность реплики: {replication_order}\n"
+                # f"количество заменённых факторов: {num_replaced_factors}\n"
+                f"генерирующе соотношение: {generating_relations_text}\n"
                 f"определяющий контраст: {defining_relation}\n"
                 f"схема смешивания:\n{alias_text}"
             )
             
-            self.text_def.clear()
-            self.text_def.setText(final_text)
+            self.def_text.clear()
+            self.def_text.setText(final_text)
             
             X_min, X_max = {}, {}
             
@@ -485,7 +509,7 @@ class FractionalFactorialWidget(QWidget):
             max_requests = 1000
             
             for values in real_values:
-                lam1, lam2, mu, r = values  # ИЗМЕНЕНО: распаковка для 4 факторов
+                lam1, lam2, mu, r = values  
                 _, _, y1, y2, _, _ = simulate_smo(lam1, lam2, mu, r, max_requests)
                 
                 y1_list.append(y1)
@@ -538,6 +562,7 @@ class FractionalFactorialWidget(QWidget):
                     self.table.setItem(i, j+NUM_FACTORS+1, QTableWidgetItem(val))
             
             # Уравнения
+            partLine = 65
             eq_y1_norm = build_regression_equation_norm_dfe(b1, factor_symbols)
             eq_y2_norm = build_regression_equation_norm_dfe(b2, factor_symbols)
             
@@ -554,30 +579,48 @@ class FractionalFactorialWidget(QWidget):
             eq_y2_nat_nl = build_full_nonlinear_nat(b2_nl, factor_symbols, X_mid, X_delta)
             
             self.text_eq.clear()
-            self.text_eq.append("==============================")
-            self.text_eq.append("ЛИНЕЙНАЯ МОДЕЛЬ (НОРМИРОВАННАЯ)")
-            self.text_eq.append("==============================")
-            self.text_eq.append(f"y1: {eq_y1_norm}")
-            self.text_eq.append(f"y2: {eq_y2_norm}\n")
+            self.text_eq.append("=" * partLine + " ЛИНЕЙНЫЕ МОДЕЛИ " + "=" * partLine)
+            self.text_eq.append("Уравнения в нормированных координатах")
+            self.text_eq.append("-" * partLine * 2)
+            self.text_eq.append("y1 (среднее время ожидания типа 1):")
+            self.text_eq.append(eq_y1_norm)
+            self.text_eq.append("")
+            self.text_eq.append("y2 (среднее время ожидания типа 2):")
+            self.text_eq.append(eq_y2_norm)
+            self.text_eq.append("-" * partLine * 2)
+            self.text_eq.append("")
             
-            self.text_eq.append("==============================")
-            self.text_eq.append("ЛИНЕЙНАЯ МОДЕЛЬ (НАТУРАЛЬНАЯ)")
-            self.text_eq.append("==============================")
-            self.text_eq.append(f"y1 = {eq_y1_nat}")
-            self.text_eq.append(f"y2 = {eq_y2_nat}\n")
+            self.text_eq.append("Уравнения в натуральных координатах")
+            self.text_eq.append("-" * partLine * 2)
+            self.text_eq.append("y1 (среднее время ожидания типа 1):")
+            self.text_eq.append(eq_y1_nat)
+            self.text_eq.append("")
+            self.text_eq.append("y2 (среднее время ожидания типа 2):")
+            self.text_eq.append(eq_y2_nat)
+            self.text_eq.append("-" * partLine * 2)
+            self.text_eq.append("")
             
-            self.text_eq.append("==============================")
-            self.text_eq.append("НЕЛИНЕЙНАЯ МОДЕЛЬ (НОРМИРОВАННАЯ)")
-            self.text_eq.append("==============================")
-            self.text_eq.append(f"y1 = {eq_y1_nl}\n")
-            self.text_eq.append(f"y2 = {eq_y2_nl}\n")
-            
-            self.text_eq.append("==============================")
-            self.text_eq.append("НЕЛИНЕЙНАЯ МОДЕЛЬ (НАТУРАЛЬНАЯ)")
-            self.text_eq.append("==============================")
-            self.text_eq.append(f"y1 = {eq_y1_nat_nl}\n")
-            self.text_eq.append(f"y2 = {eq_y2_nat_nl}\n")
-            
+            self.text_eq.append("=" * partLine + " НЕЛИНЕЙНЫЕ МОДЕЛИ " + "=" * partLine)
+            self.text_eq.append("Уравнения в нормированных координатах")
+            self.text_eq.append("-" * partLine * 2)
+            self.text_eq.append("y1 (среднее время ожидания типа 1):")
+            self.text_eq.append(eq_y1_nl)
+            self.text_eq.append("")
+            self.text_eq.append("y2 (среднее время ожидания типа 2):")
+            self.text_eq.append(eq_y2_nl)
+            self.text_eq.append("-" * partLine * 2)
+            self.text_eq.append("")
+
+            self.text_eq.append("Уравнения в натуральных координатах")
+            self.text_eq.append("-" * partLine * 2)
+            self.text_eq.append("y1 (среднее время ожидания типа 1):")
+            self.text_eq.append(eq_y1_nat_nl)
+            self.text_eq.append("")
+            self.text_eq.append("y2 (среднее время ожидания типа 2):")
+            self.text_eq.append(eq_y2_nat_nl)
+            self.text_eq.append("-" * partLine * 2)
+            self.text_eq.append("")
+
         except Exception as e:
             QMessageBox.critical(self, "Ошибка ДФЭ", str(e))
 
