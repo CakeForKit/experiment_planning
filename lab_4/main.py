@@ -12,17 +12,17 @@ from smo import simulate_smo
 
 
 FACTOR_RANGES = {
-    "λ1": (0.3, 0.4),
-    "λ2": (0.2, 0.4),
-    "μ": (2.0, 2.6),
-    "r": (2.4, 4.0)
+    "λ1": (0.8, 0.88),
+    "λ2": (0.8, 0.9),
+    "μ": (1, 1.2),
+    "r": (2.4, 3.0)
 }
 FACTOR_NAMES = list(FACTOR_RANGES.keys())
 NUM_FACTORS = len(FACTOR_NAMES)
 
 # Параметры ОЦКП
 # Для 4 факторов: m = 4, N = 2^m + 2m + 2 = 26
-NC = 2  # число центральных точек
+NC = 1  # число центральных точек
 
 # Звездное плечо для ОЦКП
 ALPHA = 2.0 # α = (2^(m/4)) для m=4: α = 2^(1) = 2
@@ -31,8 +31,8 @@ MAX_REQUESTS = 1000
 
 RESULT_COLUMNS = [
     "№", "z1(λ1)", "z2(λ2)", "z3(μ)", "z4(r)",
-    "y1", "y1_pred", "Δy1",
-    "y2", "y2_pred", "Δy2"
+    "y1", "y1_pred", "Δy1", "Δy1%",
+    "y2", "y2_pred", "Δy2", "Δy2%"
 ]
 
 def create_ccd_matrix(num_factors, alpha, nc):
@@ -135,7 +135,7 @@ def build_equation_normalized(coefficients, factor_names, include_quadratic=True
                 sign = "+" if coef >= 0 else "-"
                 parts.append(f"{sign} {abs(coef):.6f}·{terms[i]}")
     
-    return "ŷ = " + " ".join(parts)
+    return "y = " + " ".join(parts)
 
 # (строка)
 def build_equation_natural(coefficients, factor_names, mid_points, half_ranges, include_quadratic=True):
@@ -190,7 +190,7 @@ def build_equation_natural(coefficients, factor_names, mid_points, half_ranges, 
                 sign = "+" if coef >= 0 else "-"
                 parts.append(f"{sign} {abs(coef):.6f}·{term}")
     
-    return "ŷ = " + " ".join(parts)
+    return "y = " + " ".join(parts)
 
 
 def run_simulation_for_point(natural_values, max_requests):
@@ -210,8 +210,8 @@ def run_full_experiment(ccd_matrix, mid_points, half_ranges, max_requests, progr
         y1_responses.append(y1)
         y2_responses.append(y2)
         
-        if progress_callback:
-            progress_callback(i + 1, n_rows)
+        # if progress_callback:
+        #     progress_callback(i + 1, n_rows)
     
     # Строим расширенную дизайн-матрицу
     design_matrix = build_design_matrix_with_interactions(ccd_matrix, include_quadratic=True)
@@ -305,12 +305,12 @@ class MainWindow(QMainWindow):
         
         main_layout.addWidget(input_group)
         
-        # === Прогресс бар ===
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         main_layout.addWidget(self.progress_bar)
         
-        # === Разделитель ===
+
         splitter = QSplitter(Qt.Vertical)
         
         # Таблица результатов
@@ -337,7 +337,7 @@ class MainWindow(QMainWindow):
         equations_layout = QVBoxLayout(equations_container)
         equations_layout.setContentsMargins(0, 0, 0, 0)
         
-        equations_label = QLabel("Регрессионные уравнения (ОЦКП, модель 2-го порядка):")
+        equations_label = QLabel("Регрессионные уравнения:")
         equations_layout.addWidget(equations_label)
         
         self.equations_text = QTextEdit()
@@ -352,11 +352,9 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(splitter)
     
     def _read_center_values(self):
-        """Читает значения центральной точки"""
         return [float(self.factor_inputs[name].text()) for name in FACTOR_NAMES]
     
     def _populate_results_table(self, results):
-        """Заполняет таблицу результатов"""
         ccd_matrix = results['ccd_matrix']
         y1_actual = results['y1_actual']
         y2_actual = results['y2_actual']
@@ -366,94 +364,96 @@ class MainWindow(QMainWindow):
         self.results_table.setRowCount(len(y1_actual))
         
         for row_idx in range(len(y1_actual)):
-            # Номер эксперимента
             self.results_table.setItem(row_idx, 0, QTableWidgetItem(str(row_idx + 1)))
             
-            # Значения факторов (кодированные)
             for col_idx, val in enumerate(ccd_matrix[row_idx]):
-                item = QTableWidgetItem(f"{val:+.3f}")
+                if val == 0:
+                    valStr = "0"
+                else:
+                    valStr = f"{int(val):+}"
+                item = QTableWidgetItem(valStr)
                 item.setTextAlignment(Qt.AlignCenter)
                 self.results_table.setItem(row_idx, col_idx + 1, item)
             
+            delta_y1 = abs(y1_actual[row_idx] - y1_pred[row_idx])
+            delta_y1_percent = (delta_y1 / y1_actual[row_idx] * 100) if y1_actual[row_idx] != 0 else 0
+            
+            delta_y2 = abs(y2_actual[row_idx] - y2_pred[row_idx])
+            delta_y2_percent = (delta_y2 / y2_actual[row_idx] * 100) if y2_actual[row_idx] != 0 else 0
+
             # y1, y1_pred, Δy1
             col = NUM_FACTORS + 1
             self.results_table.setItem(row_idx, col, QTableWidgetItem(f"{y1_actual[row_idx]:.6f}"))
             self.results_table.setItem(row_idx, col + 1, QTableWidgetItem(f"{y1_pred[row_idx]:.6f}"))
-            self.results_table.setItem(row_idx, col + 2, QTableWidgetItem(f"{abs(y1_actual[row_idx] - y1_pred[row_idx]):.6f}"))
-            
+            self.results_table.setItem(row_idx, col + 2, QTableWidgetItem(f"{delta_y1:.6f}"))
+            self.results_table.setItem(row_idx, col + 3, QTableWidgetItem(f"{delta_y1_percent:.2f}%"))
+
             # y2, y2_pred, Δy2
-            self.results_table.setItem(row_idx, col + 3, QTableWidgetItem(f"{y2_actual[row_idx]:.6f}"))
-            self.results_table.setItem(row_idx, col + 4, QTableWidgetItem(f"{y2_pred[row_idx]:.6f}"))
-            self.results_table.setItem(row_idx, col + 5, QTableWidgetItem(f"{abs(y2_actual[row_idx] - y2_pred[row_idx]):.6f}"))
+            self.results_table.setItem(row_idx, col + 4, QTableWidgetItem(f"{y2_actual[row_idx]:.6f}"))
+            self.results_table.setItem(row_idx, col + 5, QTableWidgetItem(f"{y2_pred[row_idx]:.6f}"))
+            self.results_table.setItem(row_idx, col + 6, QTableWidgetItem(f"{delta_y2:.6f}"))
+            self.results_table.setItem(row_idx, col + 7, QTableWidgetItem(f"{delta_y2_percent:.2f}%"))
     
     def _display_equations(self, results):
-        """Отображает уравнения регрессии"""
+        """Отображает уравнения регрессии (стиль как в ПФЭ)"""
         coeffs_y1 = results['coeffs_y1']
         coeffs_y2 = results['coeffs_y2']
         mid_points = results['mid_points']
         half_ranges = results['half_ranges']
         
+        # Для ОЦКП у нас только нелинейная модель (с квадратами)
+        # Но для единообразия с ПФЭ выводим как "НЕ ЛИНЕЙНЫЕ"
+        # Если хотите показать и линейную (без квадратов) - нужно отдельно рассчитать
+        
+        partLine = 65
         equations_text = []
         
-        line = "═" * 70
-        
-        # y1 уравнения
-        equations_text.append(line)
-        equations_text.append("РЕЗУЛЬТАТЫ ДЛЯ y1 (среднее время ожидания заявок типа 1)")
-        equations_text.append(line)
+        equations_text.append("=" * partLine + " НЕ ЛИНЕЙНЫЕ " + "=" * partLine)
         equations_text.append("")
-        
-        equations_text.append("Уравнение в КОДИРОВАННЫХ координатах (z₁, z₂, z₃, z₄):")
-        equations_text.append("-" * 70)
+        equations_text.append("Уравнения в нормированных координатах")
+        equations_text.append("-" * partLine * 2)
+        equations_text.append("y1 (среднее время ожидания типа 1):")
         eq_y1_norm = build_equation_normalized(coeffs_y1, FACTOR_NAMES, include_quadratic=True)
         equations_text.append(eq_y1_norm)
         equations_text.append("")
+        equations_text.append("y2 (среднее время ожидания типа 2):")
+        eq_y2_norm = build_equation_normalized(coeffs_y2, FACTOR_NAMES, include_quadratic=True)
+        equations_text.append(eq_y2_norm)
+        equations_text.append("-" * partLine * 2)
+        equations_text.append("")
         
-        equations_text.append("Уравнение в НАТУРАЛЬНЫХ координатах (λ₁, λ₂, μ, r):")
-        equations_text.append("-" * 70)
+        equations_text.append("Уравнения в натуральных координатах")
+        equations_text.append("-" * partLine * 2)
+        equations_text.append("y1 (среднее время ожидания типа 1):")
         eq_y1_nat = build_equation_natural(coeffs_y1, FACTOR_NAMES, mid_points, half_ranges, include_quadratic=True)
         equations_text.append(eq_y1_nat)
         equations_text.append("")
-        
-        # y2 уравнения
-        equations_text.append(line)
-        equations_text.append("РЕЗУЛЬТАТЫ ДЛЯ y2 (среднее время ожидания заявок типа 2)")
-        equations_text.append(line)
-        equations_text.append("")
-        
-        equations_text.append("Уравнение в КОДИРОВАННЫХ координатах (z₁, z₂, z₃, z₄):")
-        equations_text.append("-" * 70)
-        eq_y2_norm = build_equation_normalized(coeffs_y2, FACTOR_NAMES, include_quadratic=True)
-        equations_text.append(eq_y2_norm)
-        equations_text.append("")
-        
-        equations_text.append("Уравнение в НАТУРАЛЬНЫХ координатах (λ₁, λ₂, μ, r):")
-        equations_text.append("-" * 70)
+        equations_text.append("y2 (среднее время ожидания типа 2):")
         eq_y2_nat = build_equation_natural(coeffs_y2, FACTOR_NAMES, mid_points, half_ranges, include_quadratic=True)
         equations_text.append(eq_y2_nat)
+        equations_text.append("-" * partLine * 2)
         equations_text.append("")
         
-        # Информация о плане
-        equations_text.append(line)
-        equations_text.append("ПАРАМЕТРЫ ОЦКП")
-        equations_text.append(line)
-        equations_text.append(f"Число факторов (m): {NUM_FACTORS}")
-        equations_text.append(f"Число опытов ядра (2^m): {2 ** NUM_FACTORS}")
-        equations_text.append(f"Число звездных точек (2m): {2 * NUM_FACTORS}")
-        equations_text.append(f"Число центральных точек (nc): {NC}")
-        equations_text.append(f"Общее число опытов (N): {2 ** NUM_FACTORS + 2 * NUM_FACTORS + NC}")
-        equations_text.append(f"Звездное плечо (α): {ALPHA}")
+        equations_text.append("=" * partLine + " ПАРАМЕТРЫ ОЦКП " + "=" * partLine)
+        # equations_text.append("-" * partLine * 2)
+        equations_text.append(f"Число факторов (m):                     {NUM_FACTORS}")
+        equations_text.append(f"Число опытов ядра (2^m):               {2 ** NUM_FACTORS}")
+        equations_text.append(f"Число звездных точек (2m):             {2 * NUM_FACTORS}")
+        equations_text.append(f"Число центральных точек (nc):          {NC}")
+        equations_text.append(f"Общее число опытов (N):                {2 ** NUM_FACTORS + 2 * NUM_FACTORS + NC}")
+        equations_text.append(f"Звездное плечо (α):                    {ALPHA}")
         equations_text.append("")
-        equations_text.append("Центральная точка (натуральные значения):")
-        for i, name in enumerate(FACTOR_NAMES):
-            equations_text.append(f"  {name} = {mid_points[i]:.4f}")
-        equations_text.append("")
-        equations_text.append("Интервалы варьирования (Δ):")
-        for i, name in enumerate(FACTOR_NAMES):
-            equations_text.append(f"  {name} = ±{half_ranges[i]:.4f}")
+        # equations_text.append("Центральная точка (натуральные значения):")
+        # for i, name in enumerate(FACTOR_NAMES):
+        #     equations_text.append(f"  {name} = {mid_points[i]:.4f}")
+        # equations_text.append("")
+        # equations_text.append("Интервалы варьирования (Δ):")
+        # for i, name in enumerate(FACTOR_NAMES):
+        #     equations_text.append(f"  {name} = ±{half_ranges[i]:.4f}")
+        # equations_text.append("-" * partLine * 2)
         
-        self.equations_text.setPlainText("\n".join(equations_text))
-    
+        self.equations_text.setPlainText("\n".join(equations_text)) 
+        
     def _on_calculate(self):
         """Обработчик нажатия кнопки"""
         if self.calculation_thread and self.calculation_thread.isRunning():
@@ -491,25 +491,17 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
     
     def _on_progress(self, current, total):
-        """Обновление прогресса"""
         self.progress_bar.setMaximum(total)
         self.progress_bar.setValue(current)
         self.progress_bar.setFormat(f"Выполняется эксперимент... {current}/{total} опытов")
     
     def _on_finished(self, results):
-        """Завершение расчета"""
         self.results = results
         self._populate_results_table(results)
         self._display_equations(results)
         
         self.calc_button.setEnabled(True)
         self.progress_bar.setVisible(False)
-        
-        QMessageBox.information(
-            self, "Завершено",
-            f"Эксперимент успешно выполнен!\n"
-            f"Всего опытов: {len(results['y1_actual'])}"
-        )
     
     def _on_error(self, error_msg):
         """Обработка ошибки"""

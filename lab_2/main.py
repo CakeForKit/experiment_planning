@@ -22,8 +22,8 @@ FACTOR_NAMES = list(FACTOR_RANGES.keys())
 NUM_FACTORS = len(FACTOR_NAMES)
 RESULT_COLUMNS = [
     "№", "λ1", "λ2", "μ", "r", 
-    "y1", "y1_lin", "y1_nlin", "Δy1_lin", "Δy1_nlin",
-    "y2", "y2_lin", "y2_nlin", "Δy2_lin", "Δy2_nlin"
+    "y1", "y1_lin", "Δy1_lin%", "y1_nlin", # "Δy1_nlin%",
+    "y2", "y2_lin", "Δy2_lin%", "y2_nlin", # "Δy2_nlin%"
 ]
 MAX_REQUESTS = 1000
 
@@ -247,24 +247,26 @@ def calculate_experiment_results(mid_points, half_ranges, design_matrix):
         y1_full = predict_full(a1_full, row)         # Со всеми взаимодействиями
         y2_linear = predict_linear(a2_linear, row)
         y2_full = predict_full(a2_full, row)
-        delta_y1_linear = abs(y1_actual - y1_linear)
-        delta_y1_full = abs(y1_actual - y1_full)
-        delta_y2_linear = abs(y2_actual - y2_linear)
-        delta_y2_full = abs(y2_actual - y2_full)
+        
+        # Вычисляем процент отклонения
+        delta_y1_lin_percent = 0.0 if y1_actual == 0 else (abs(y1_actual - y1_linear) / abs(y1_actual)) * 100
+        # delta_y1_nlin_percent = 0.0 if y1_actual == 0 else (abs(y1_actual - y1_full) / abs(y1_actual)) * 100
+        delta_y2_lin_percent = 0.0 if y2_actual == 0 else (abs(y2_actual - y2_linear) / abs(y2_actual)) * 100
+        # delta_y2_nlin_percent = 0.0 if y2_actual == 0 else (abs(y2_actual - y2_full) / abs(y2_actual)) * 100
         
         table_data.append({
             'num': i + 1,
             'factors': row[1:NUM_FACTORS + 1],
             'y1': y1_actual,
             'y1_lin': y1_linear,
+            'y1_lin_percent': delta_y1_lin_percent,
             'y1_nlin': y1_full,
-            'delta_y1_lin': delta_y1_linear,
-            'delta_y1_nlin': delta_y1_full,
+            # 'y1_nlin_percent': delta_y1_nlin_percent,
             'y2': y2_actual,
             'y2_lin': y2_linear,
+            'y2_lin_percent': delta_y2_lin_percent,
             'y2_nlin': y2_full,
-            'delta_y2_lin': delta_y2_linear,
-            'delta_y2_nlin': delta_y2_full
+            # 'y2_nlin_percent': delta_y2_nlin_percent
         })
     
     return {
@@ -274,7 +276,6 @@ def calculate_experiment_results(mid_points, half_ranges, design_matrix):
         'coefficients_y2_linear': a2_linear,
         'coefficients_y2_full': a2_full
     }
-
 
 
 class MainWindow(QMainWindow):
@@ -393,18 +394,66 @@ class MainWindow(QMainWindow):
             
             # Значения y1
             col = NUM_FACTORS + 1
-            for key in ['y1', 'y1_lin', 'y1_nlin', 'delta_y1_lin', 'delta_y1_nlin']:
-                item = QTableWidgetItem(f"{row_data[key]:.4e}")
-                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                self.results_table.setItem(row_idx, col, item)
-                col += 1
             
-            # Значения y2
-            for key in ['y2', 'y2_lin', 'y2_nlin', 'delta_y2_lin', 'delta_y2_nlin']:
-                item = QTableWidgetItem(f"{row_data[key]:.4e}")
-                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                self.results_table.setItem(row_idx, col, item)
-                col += 1
+            # y1 actual
+            item = QTableWidgetItem(f"{row_data['y1']:.4e}")
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.results_table.setItem(row_idx, col, item)
+            col += 1
+            
+            # y1_lin
+            item = QTableWidgetItem(f"{row_data['y1_lin']:.4e}")
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.results_table.setItem(row_idx, col, item)
+            col += 1
+            
+            # Δy1_lin%
+            item = QTableWidgetItem(f"{row_data['y1_lin_percent']:.2f}%")
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.results_table.setItem(row_idx, col, item)
+            col += 1
+            
+            # y1_nlin
+            item = QTableWidgetItem(f"{row_data['y1_nlin']:.4e}")
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.results_table.setItem(row_idx, col, item)
+            col += 1
+            
+            # Δy1_nlin%
+            # item = QTableWidgetItem(f"{row_data['y1_nlin_percent']:.2f}%")
+            # item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            # self.results_table.setItem(row_idx, col, item)
+            # col += 1
+            
+            # y2 actual
+            item = QTableWidgetItem(f"{row_data['y2']:.4e}")
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.results_table.setItem(row_idx, col, item)
+            col += 1
+            
+            # y2_lin
+            item = QTableWidgetItem(f"{row_data['y2_lin']:.4e}")
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.results_table.setItem(row_idx, col, item)
+            col += 1
+            
+            # Δy2_lin%
+            item = QTableWidgetItem(f"{row_data['y2_lin_percent']:.2f}%")
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.results_table.setItem(row_idx, col, item)
+            col += 1
+            
+            # y2_nlin
+            item = QTableWidgetItem(f"{row_data['y2_nlin']:.4e}")
+            item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.results_table.setItem(row_idx, col, item)
+            col += 1
+            
+            # Δy2_nlin%
+            # item = QTableWidgetItem(f"{row_data['y2_nlin_percent']:.2f}%")
+            # item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            # self.results_table.setItem(row_idx, col, item)
+            # col += 1
     
     def _display_equations(self, a1_linear, a1_full, a2_linear, a2_full, mid_points, half_ranges):
         partLine = 65
@@ -494,4 +543,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
